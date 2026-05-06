@@ -315,7 +315,7 @@ updateTodayBadge(); setInterval(updateTodayBadge, 60000);
 
 /* ── APPS SCRIPT URL ── */
 // ⬇⬇⬇ DÁN URL APPS SCRIPT CỦA BẠN VÀO ĐÂY ⬇⬇⬇
-const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby7Ss0oz1tUSN4dHpyU0pwB1hBxH3hP8jfmB3deIjeXgv942KoTr-0MDstRHIwnGIK7/exec';
+const APPS_SCRIPT_URL = 'PASTE_YOUR_APPS_SCRIPT_URL_HERE';
 // ⬆⬆⬆ CHỈ SỬA DÒNG TRÊN, KHÔNG SỬA GÌ KHÁC ⬆⬆⬆
 
 /* ── DANH SÁCH KHO + TỌA ĐỘ ── */
@@ -337,7 +337,7 @@ function calcDistance(lat1, lng1, lat2, lng2) {
   const R = 6371000;
   const dLat = (lat2 - lat1) * Math.PI / 180;
   const dLng = (lng2 - lng1) * Math.PI / 180;
-  const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180) * Math.cos(lat2*Math.PI/180) * Math.sin(dLng/2)**2;
+  const a = Math.pow(Math.sin(dLat/2), 2) + Math.cos(lat1*Math.PI/180) * Math.cos(lat2*Math.PI/180) * Math.pow(Math.sin(dLng/2), 2);
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
 }
 
@@ -585,17 +585,17 @@ function showSuccess(p){
     [isVao ? 'Giờ vào' : 'Giờ ra', p.time],
   ];
   if(p.driveLink){
-    rows.push(['Ảnh Drive', `<a href="${p.driveLink}" target="_blank">Xem ảnh ↗</a>`]);
+    rows.push(['Ảnh Drive', '<a href="' + p.driveLink + '" target="_blank">Xem ảnh ↗</a>']);
   }
   if(gpsData){
-    rows.push(['Vị trí', `<a href="${gpsData.mapsLink}" target="_blank">Xem bản đồ ↗</a>`]);
+    rows.push(['Vị trí', '<a href="' + gpsData.mapsLink + '" target="_blank">Xem bản đồ ↗</a>']);
     rows.push(['Độ chính xác', '±' + gpsData.accuracy + 'm']);
   } else {
     rows.push(['Vị trí', 'Không lấy được GPS']);
   }
 
   document.getElementById('detail-rows').innerHTML = rows.map(([l,v]) =>
-    `<div class="detail-row"><span class="detail-label">${l}</span><span class="detail-val">${v}</span></div>`
+    '<div class="detail-row"><span class="detail-label">' + l + '</span><span class="detail-val">' + v + '</span></div>'
   ).join('');
 
   // Hiện thumbnail ảnh vừa chụp
