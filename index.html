@@ -194,10 +194,14 @@
       <label>Kho làm việc <span style="color:#e24b4a">*</span></label>
       <select id="warehouse">
         <option value="">-- Chọn kho --</option>
-        <option>Kho A - Bình Dương</option>
-        <option>Kho B - Long An</option>
-        <option>Kho C - Đồng Nai</option>
-        <option>Kho D - TP.HCM</option>
+        <option value="Kho Giao Hàng Nặng Dĩ An-Bình Dương">Kho Giao Hàng Nặng Dĩ An-Bình Dương</option>
+        <option value="Kho Giao Hàng Nặng Thủ Dầu Một">Kho Giao Hàng Nặng Thủ Dầu Một</option>
+        <option value="Kho Giao Hàng Nặng TP.Tây Ninh">Kho Giao Hàng Nặng TP.Tây Ninh</option>
+        <option value="Kho Giao Hàng Nặng Biên Hoà">Kho Giao Hàng Nặng Biên Hoà</option>
+        <option value="Kho Giao Hàng Nặng Long Thành-Đồng Nai">Kho Giao Hàng Nặng Long Thành-Đồng Nai</option>
+        <option value="Kho Giao Hàng Nặng Trảng Bom-Đồng Nai">Kho Giao Hàng Nặng Trảng Bom-Đồng Nai</option>
+        <option value="Kho Giao Hàng Nặng Bến Cát-Bình Dương">Kho Giao Hàng Nặng Bến Cát-Bình Dương</option>
+        <option value="Kho Giao Hàng Nặng Thuận An-Bình Dương">Kho Giao Hàng Nặng Thuận An-Bình Dương</option>
       </select>
     </div>
 
@@ -313,6 +317,29 @@ updateTodayBadge(); setInterval(updateTodayBadge, 60000);
 // ⬇⬇⬇ DÁN URL APPS SCRIPT CỦA BẠN VÀO ĐÂY ⬇⬇⬇
 const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby7Ss0oz1tUSN4dHpyU0pwB1hBxH3hP8jfmB3deIjeXgv942KoTr-0MDstRHIwnGIK7/exec';
 // ⬆⬆⬆ CHỈ SỬA DÒNG TRÊN, KHÔNG SỬA GÌ KHÁC ⬆⬆⬆
+
+/* ── DANH SÁCH KHO + TỌA ĐỘ ── */
+// Tọa độ trung tâm từng kho (lat, lng) — bán kính cho phép: 100m
+const WAREHOUSES = {
+  'Kho Giao Hàng Nặng Dĩ An-Bình Dương'       : { lat: 10.8923432, lng: 106.7904047 },
+  'Kho Giao Hàng Nặng Thủ Dầu Một'             : { lat: 11.0014055, lng: 106.6778286 },
+  'Kho Giao Hàng Nặng TP.Tây Ninh'             : { lat: 11.3237948, lng: 106.1301520 },
+  'Kho Giao Hàng Nặng Biên Hoà'                : { lat: 10.927172,  lng: 106.916397  },
+  'Kho Giao Hàng Nặng Long Thành-Đồng Nai'     : { lat: 10.791250,  lng: 106.954861  },
+  'Kho Giao Hàng Nặng Trảng Bom-Đồng Nai'      : { lat: 10.9404676, lng: 107.0896455 },
+  'Kho Giao Hàng Nặng Bến Cát-Bình Dương'      : { lat: 11.1089444, lng: 106.5938611 },
+  'Kho Giao Hàng Nặng Thuận An-Bình Dương'     : { lat: 10.881124,  lng: 106.747522  },
+};
+const GEO_RADIUS_M = 150; // Bán kính cho phép (m) — dùng 150m để bù GPS kém trong nhà kho
+
+// Tính khoảng cách giữa 2 tọa độ (Haversine formula), trả về mét
+function calcDistance(lat1, lng1, lat2, lng2) {
+  const R = 6371000;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180) * Math.cos(lat2*Math.PI/180) * Math.sin(dLng/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
 
 /* ── SHIFT TOGGLE ── */
 let selectedShift = 'vao';
@@ -466,6 +493,31 @@ async function submitForm(){
     setTimeout(() => document.getElementById('camera-box').style.borderColor = '', 2000);
     return;
   }
+  // Kiểm tra vị trí GPS có hợp lệ với kho đã chọn không
+  const warehouseCoord = WAREHOUSES[warehouse];
+  if (warehouseCoord) {
+    if (warehouseCoord.lat === 0) {
+      // Kho chưa có tọa độ — cảnh báo nhưng vẫn cho qua
+      console.warn('Kho chưa cập nhật tọa độ:', warehouse);
+    } else if (!gpsData) {
+      showErr('Không lấy được vị trí GPS. Vui lòng bật GPS và thử lại.');
+      return;
+    } else {
+      const dist = calcDistance(
+        parseFloat(gpsData.lat), parseFloat(gpsData.lng),
+        warehouseCoord.lat, warehouseCoord.lng
+      );
+      if (dist > GEO_RADIUS_M) {
+        showErr(
+          'Vị trí của bạn cách kho ' + Math.round(dist) + 'm — vượt quá ' + GEO_RADIUS_M + 'm cho phép.
+' +
+          'Bạn phải có mặt tại ' + warehouse + ' để chấm công.'
+        );
+        return;
+      }
+    }
+  }
+
   if(!APPS_SCRIPT_URL.startsWith('https://script.google.com')){
     showErr('Chưa cài đặt URL Apps Script. Liên hệ quản trị viên.');
     return;
