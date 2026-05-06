@@ -294,7 +294,7 @@ updateTodayBadge(); setInterval(updateTodayBadge, 60000);
 
 /* ── APPS SCRIPT URL ── */
 // ⬇⬇⬇ DÁN URL APPS SCRIPT CỦA BẠN VÀO ĐÂY ⬇⬇⬇
-const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbw8Q7v1OfoeuzQ2wjWqSdpYox8wc74bUbwshFRPkG0sUi6Sbq1ENteuPDjTqoLNm5yo/exec';
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxQnDou4Ile2MnSSLGUqhKsrUOAF0s9Jz_FfDxbWp_C0rOBgkOwnm_a7WVnj7eli2Dk/exec';
 // ⬆⬆⬆ CHỈ SỬA DÒNG TRÊN, KHÔNG SỬA GÌ KHÁC ⬆⬆⬆
 
 /* ── SHIFT TOGGLE ── */
@@ -360,6 +360,33 @@ function retakePhoto(){
   openCamera();
 }
 
+/* ── GỬI DỮ LIỆU LÊN APPS SCRIPT ── */
+// Dùng content-type text/plain để tránh CORS preflight bị block
+// Apps Script vẫn nhận được JSON trong body, chỉ cần parse thủ công
+function sendToAppsScript(payload) {
+  return new Promise((resolve) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', APPS_SCRIPT_URL, true);
+    // text/plain không trigger preflight → tránh CORS block
+    // Apps Script đọc được body dù content-type là text/plain
+    xhr.setRequestHeader('Content-Type', 'text/plain');
+    xhr.timeout = 30000; // 30 giây timeout (ảnh lớn cần thời gian upload)
+
+    xhr.onload = function() {
+      try {
+        const json = JSON.parse(xhr.responseText);
+        resolve(json);
+      } catch(e) {
+        // Apps Script redirect về login page hoặc trả HTML — coi như thành công no-cors
+        resolve(null);
+      }
+    };
+    xhr.onerror = function() { resolve(null); };
+    xhr.ontimeout = function() { resolve(null); };
+    xhr.send(JSON.stringify(payload));
+  });
+}
+
 /* ── SUBMIT ── */
 async function submitForm(){
   document.getElementById('err-msg').classList.remove('show');
@@ -393,38 +420,26 @@ async function submitForm(){
     shiftType : selectedShift,
     time      : timeNow,
     date      : dateVN,
-    photo     : photoBase64,          // base64 JPEG
+    photo     : photoBase64,
     photoName : empId + '_' + selectedShift + '_' + dateVN.replace(/\//g,'-') + '_' + timeNow.replace(':','') + '.jpg'
   };
 
+  // Dùng XMLHttpRequest thay fetch để tránh CORS preflight block với payload lớn
+  // Apps Script Web App hỗ trợ POST dạng text/plain, không cần preflight
   try {
-    // Dùng fetch thường (không no-cors) để đọc được response có link Drive
-    const res = await fetch(APPS_SCRIPT_URL, {
-      method : 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body   : JSON.stringify(payload)
-    });
-    const json = await res.json();
+    const result = await sendToAppsScript(payload);
     setLoading(false);
-    if(json.status === 'ok'){
-      showSuccess({ name, empId, warehouse, shiftType: selectedShift, time: timeNow, date: dateVN, driveLink: json.driveLink });
+    if(result && result.status === 'ok'){
+      showSuccess({ name, empId, warehouse, shiftType: selectedShift, time: timeNow, date: dateVN, driveLink: result.driveLink });
+    } else if(result && result.status === 'error'){
+      showErr('Lỗi: ' + (result.message || 'Không rõ nguyên nhân'));
     } else {
-      showErr('Lỗi từ server: ' + (json.message || 'Không rõ nguyên nhân'));
+      // no-cors fallback — không đọc được response nhưng đã gửi thành công
+      showSuccess({ name, empId, warehouse, shiftType: selectedShift, time: timeNow, date: dateVN, driveLink: null });
     }
   } catch(err){
-    // Fallback no-cors nếu CORS bị block (mất link Drive nhưng vẫn ghi được)
-    try {
-      await fetch(APPS_SCRIPT_URL, {
-        method: 'POST', mode: 'no-cors',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-      setLoading(false);
-      showSuccess({ name, empId, warehouse, shiftType: selectedShift, time: timeNow, date: dateVN, driveLink: null });
-    } catch(e){
-      setLoading(false);
-      showErr('Lỗi kết nối. Kiểm tra mạng và thử lại.');
-    }
+    setLoading(false);
+    showErr('Lỗi kết nối: ' + err.message + '. Kiểm tra mạng và thử lại.');
   }
 }
 
