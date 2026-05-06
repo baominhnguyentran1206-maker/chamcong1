@@ -66,6 +66,16 @@
   .today-text { font-size: 13px; color: #444; font-weight: 500; }
   .today-sub { font-size: 11px; color: #999; margin-left: auto; }
 
+  /* GPS BADGE */
+  .gps-badge { display: flex; align-items: center; gap: 8px; background: #fff; border: 1px solid #e0e0e0; border-radius: 12px; padding: 10px 14px; transition: border-color 0.2s; }
+  .gps-dot { width: 8px; height: 8px; border-radius: 50%; background: #ddd; flex-shrink: 0; transition: background 0.3s; animation: none; }
+  .gps-dot.scanning { background: #f5a623; animation: pulse 1s infinite; }
+  .gps-dot.ok { background: #639922; animation: none; }
+  .gps-dot.err { background: #e24b4a; animation: none; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+  .gps-text { font-size: 13px; color: #444; font-weight: 500; flex: 1; min-width: 0; }
+  .gps-sub { font-size: 11px; color: #999; white-space: nowrap; }
+
   /* CAMERA */
   .camera-box {
     border: 1.5px dashed #d0d0d0; border-radius: 14px;
@@ -211,6 +221,13 @@
       <span class="today-sub">Ngày hôm nay · tự động</span>
     </div>
 
+    <!-- GPS BADGE -->
+    <div class="gps-badge" id="gps-badge">
+      <div class="gps-dot scanning" id="gps-dot"></div>
+      <span class="gps-text" id="gps-text">Đang lấy vị trí...</span>
+      <span class="gps-sub" id="gps-sub">GPS</span>
+    </div>
+
     <div class="divider"></div>
     <div class="section-title">Ảnh xác nhận <span class="photo-required-note">* bắt buộc</span></div>
 
@@ -294,7 +311,7 @@ updateTodayBadge(); setInterval(updateTodayBadge, 60000);
 
 /* ── APPS SCRIPT URL ── */
 // ⬇⬇⬇ DÁN URL APPS SCRIPT CỦA BẠN VÀO ĐÂY ⬇⬇⬇
-const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwEcFyCsQqi_6urFGbdGCxUwcdjxisQgKPwoYVDWejRPO508-bl95xt9GydKb4gvyVt/exec';
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby7Ss0oz1tUSN4dHpyU0pwB1hBxH3hP8jfmB3deIjeXgv942KoTr-0MDstRHIwnGIK7/exec';
 // ⬆⬆⬆ CHỈ SỬA DÒNG TRÊN, KHÔNG SỬA GÌ KHÁC ⬆⬆⬆
 
 /* ── SHIFT TOGGLE ── */
@@ -304,6 +321,47 @@ function selectShift(el){
   el.classList.add('active');
   selectedShift = el.dataset.val;
 }
+
+/* ── GPS / GEOLOCATION ── */
+let gpsData = null; // { lat, lng, accuracy, mapsLink }
+
+function initGPS(){
+  const dot  = document.getElementById('gps-dot');
+  const text = document.getElementById('gps-text');
+  const sub  = document.getElementById('gps-sub');
+
+  if(!navigator.geolocation){
+    dot.className  = 'gps-dot err';
+    text.textContent = 'Thiết bị không hỗ trợ GPS';
+    return;
+  }
+
+  navigator.geolocation.getCurrentPosition(
+    function(pos){
+      const lat = pos.coords.latitude.toFixed(6);
+      const lng = pos.coords.longitude.toFixed(6);
+      const acc = Math.round(pos.coords.accuracy);
+      gpsData = {
+        lat, lng, accuracy: acc,
+        mapsLink: 'https://www.google.com/maps?q=' + lat + ',' + lng
+      };
+      dot.className    = 'gps-dot ok';
+      text.textContent = lat + ', ' + lng;
+      sub.textContent  = '±' + acc + 'm';
+    },
+    function(err){
+      dot.className = 'gps-dot err';
+      const msgs = {1:'Bị từ chối quyền GPS', 2:'Không lấy được vị trí', 3:'Hết thời gian chờ GPS'};
+      text.textContent = msgs[err.code] || 'Lỗi GPS';
+      sub.textContent  = 'Thử lại';
+      // Cho phép bấm badge để thử lại
+      document.getElementById('gps-badge').style.cursor = 'pointer';
+      document.getElementById('gps-badge').onclick = function(){ gpsData=null; initGPS(); this.onclick=null; this.style.cursor=''; };
+    },
+    { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+  );
+}
+initGPS();
 
 /* ── CAMERA ── */
 let stream = null;
@@ -421,7 +479,11 @@ async function submitForm(){
     time      : timeNow,
     date      : dateVN,
     photo     : photoBase64,
-    photoName : empId + '_' + selectedShift + '_' + dateVN.replace(/\//g,'-') + '_' + timeNow.replace(':','') + '.jpg'
+    photoName : empId + '_' + selectedShift + '_' + dateVN.replace(/\//g,'-') + '_' + timeNow.replace(':','') + '.jpg',
+    gpsLat    : gpsData ? gpsData.lat      : '',
+    gpsLng    : gpsData ? gpsData.lng      : '',
+    gpsAcc    : gpsData ? gpsData.accuracy : '',
+    mapsLink  : gpsData ? gpsData.mapsLink : ''
   };
 
   // Dùng XMLHttpRequest thay fetch để tránh CORS preflight block với payload lớn
@@ -473,6 +535,12 @@ function showSuccess(p){
   if(p.driveLink){
     rows.push(['Ảnh Drive', `<a href="${p.driveLink}" target="_blank">Xem ảnh ↗</a>`]);
   }
+  if(gpsData){
+    rows.push(['Vị trí', `<a href="${gpsData.mapsLink}" target="_blank">Xem bản đồ ↗</a>`]);
+    rows.push(['Độ chính xác', '±' + gpsData.accuracy + 'm']);
+  } else {
+    rows.push(['Vị trí', 'Không lấy được GPS']);
+  }
 
   document.getElementById('detail-rows').innerHTML = rows.map(([l,v]) =>
     `<div class="detail-row"><span class="detail-label">${l}</span><span class="detail-val">${v}</span></div>`
@@ -496,6 +564,15 @@ function resetForm(){
   selectedShift = 'vao';
   document.querySelectorAll('.shift-btn').forEach((b,i) => b.classList.toggle('active', i===0));
   document.getElementById('submit-btn').disabled = false;
+
+  // Reset GPS
+  gpsData = null;
+  document.getElementById('gps-dot').className = 'gps-dot scanning';
+  document.getElementById('gps-text').textContent = 'Đang lấy vị trí...';
+  document.getElementById('gps-sub').textContent = 'GPS';
+  document.getElementById('gps-badge').style.cursor = '';
+  document.getElementById('gps-badge').onclick = null;
+  initGPS();
 
   // Reset camera
   photoBase64 = null;
